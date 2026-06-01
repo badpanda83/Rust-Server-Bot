@@ -5,45 +5,34 @@ const keywords = (process.env.KEYWORD_LIST || 'cheat,hack,exploit')
   .split(',')
   .map((k) => k.trim().toLowerCase());
 
-async function handleChatLog(raw, client) {
-  if (!raw) return;
+// Called for each real-time push event from Rust RCON (Identifier: -1)
+async function handleChatMessage(event, client) {
+  // Rust push event shape: { Type, UserId, Username, Message, Time, Channel, Color }
+  const { UserId: steamId, Username: username, Message: message } = event;
+  if (!message || !username) return;
 
-  let lines;
-  try {
-    const parsed = JSON.parse(raw);
-    lines = Array.isArray(parsed) ? parsed : parsed.Messages || [];
-  } catch {
+  // Deduplicate by time + userId
+  const msgId = `${event.Time}-${steamId}`;
+  if (processedMessages.has(msgId)) return;
+  processedMessages.add(msgId);
+  if (processedMessages.size > 500) {
+    processedMessages.delete(processedMessages.values().next().value);
+  }
+
+  // Relay to chat channel
+  await relayChatMessage(client, username, steamId, message);
+
+  // Handle !report command
+  if (message.toLowerCase().startsWith('!report')) {
+    await handleReport(client, username, steamId, message);
     return;
   }
 
-  for (const entry of lines) {
-    const msgId = `${entry.Time}-${entry.UserId}`;
-    if (processedMessages.has(msgId)) continue;
-    processedMessages.add(msgId);
-
-    // Keep cache from growing unbounded
-    if (processedMessages.size > 500) {
-      processedMessages.delete(processedMessages.values().next().value);
-    }
-
-    const { Message: message, Username: username, UserId: steamId } = entry;
-    if (!message) continue;
-
-    // Relay to chat channel
-    await relayChatMessage(client, username, steamId, message);
-
-    // Handle !report command
-    if (message.toLowerCase().startsWith('!report')) {
-      await handleReport(client, username, steamId, message);
-      continue;
-    }
-
-    // Keyword detection
-    const lower = message.toLowerCase();
-    const hit = keywords.find((kw) => lower.includes(kw));
-    if (hit) {
-      await handleKeywordAlert(client, username, steamId, message, hit);
-    }
+  // Keyword detection
+  const lower = message.toLowerCase();
+  const hit = keywords.find((kw) => lower.includes(kw));
+  if (hit) {
+    await handleKeywordAlert(client, username, steamId, message, hit);
   }
 }
 
@@ -97,4 +86,4 @@ async function handleKeywordAlert(client, username, steamId, message, keyword) {
   await channel.send({ embeds: [embed] });
 }
 
-module.exports = { handleChatLog };
+module.exports = { handleChatMessage };
