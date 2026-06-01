@@ -1,6 +1,16 @@
 const { EmbedBuilder } = require('discord.js');
 const { getRcon } = require('../rcon/rconClient');
 
+function parseSeed(val) {
+  if (val === undefined || val === null || val === '') return 'N/A';
+  return String(val);
+}
+
+function parseMapSize(val) {
+  if (val === undefined || val === null || val === '' || val === 0) return 'N/A';
+  return String(val);
+}
+
 async function handleInteraction(interaction) {
   if (!interaction.isChatInputCommand()) return;
 
@@ -14,15 +24,17 @@ async function handleInteraction(interaction) {
       const data = JSON.parse(info);
       const embed = new EmbedBuilder()
         .setTitle('🦀 Rust Server Status')
-        .setColor(0xcd412b)
+        .setColor(0x2ecc71)
         .addFields(
+          { name: '🟢 Status', value: 'Online', inline: true },
           { name: '🗺️ Map', value: data.Map || 'Unknown', inline: true },
           { name: '👥 Players', value: `${data.Players}/${data.MaxPlayers}`, inline: true },
           { name: '⏳ Queue', value: String(data.Queued || 0), inline: true },
-          { name: '🌱 Seed', value: String(data.WorldSeed || 'N/A'), inline: true },
-          { name: '📐 Map Size', value: String(data.WorldSize || 'N/A'), inline: true },
+          { name: '🌱 Seed', value: parseSeed(data.WorldSeed), inline: true },
+          { name: '📐 Map Size', value: parseMapSize(data.WorldSize), inline: true },
           { name: '🕐 Game Time', value: String(data.GameTime || 'N/A'), inline: true },
         )
+        .setFooter({ text: 'Last updated' })
         .setTimestamp();
       await interaction.editReply({ embeds: [embed] });
     } catch (err) {
