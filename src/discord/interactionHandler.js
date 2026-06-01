@@ -1,16 +1,6 @@
 const { EmbedBuilder } = require('discord.js');
 const { getRcon } = require('../rcon/rconClient');
 
-function parseSeed(val) {
-  if (val === undefined || val === null || val === '') return 'N/A';
-  return String(val);
-}
-
-function parseMapSize(val) {
-  if (val === undefined || val === null || val === '' || val === 0) return 'N/A';
-  return String(val);
-}
-
 async function handleInteraction(interaction) {
   if (!interaction.isChatInputCommand()) return;
 
@@ -20,25 +10,32 @@ async function handleInteraction(interaction) {
   if (commandName === 'status') {
     await interaction.deferReply();
     try {
-      const info = await rcon.send('serverinfo');
+      const [info, seedRaw, sizeRaw] = await Promise.all([
+        rcon.send('serverinfo'),
+        rcon.send('server.seed'),
+        rcon.send('server.worldsize'),
+      ]);
       const data = JSON.parse(info);
+      const seed = seedRaw ? seedRaw.trim() : 'N/A';
+      const mapSize = sizeRaw ? sizeRaw.trim() : 'N/A';
+
       const embed = new EmbedBuilder()
-        .setTitle('🦀 Rust Server Status')
+        .setTitle('\uD83E\uDD80 Rust Server Status')
         .setColor(0x2ecc71)
         .addFields(
-          { name: '🟢 Status', value: 'Online', inline: true },
-          { name: '🗺️ Map', value: data.Map || 'Unknown', inline: true },
-          { name: '👥 Players', value: `${data.Players}/${data.MaxPlayers}`, inline: true },
-          { name: '⏳ Queue', value: String(data.Queued || 0), inline: true },
-          { name: '🌱 Seed', value: parseSeed(data.WorldSeed), inline: true },
-          { name: '📐 Map Size', value: parseMapSize(data.WorldSize), inline: true },
-          { name: '🕐 Game Time', value: String(data.GameTime || 'N/A'), inline: true },
+          { name: '\uD83D\uDFE2 Status', value: 'Online', inline: true },
+          { name: '\uD83D\uDDFA\uFE0F Map', value: data.Map || 'Unknown', inline: true },
+          { name: '\uD83D\uDC65 Players', value: `${data.Players}/${data.MaxPlayers}`, inline: true },
+          { name: '\u23F3 Queue', value: String(data.Queued || 0), inline: true },
+          { name: '\uD83C\uDF31 Seed', value: seed, inline: true },
+          { name: '\uD83D\uDCD0 Map Size', value: mapSize, inline: true },
+          { name: '\uD83D\uDD50 Game Time', value: String(data.GameTime || 'N/A'), inline: true },
         )
         .setFooter({ text: 'Last updated' })
         .setTimestamp();
       await interaction.editReply({ embeds: [embed] });
     } catch (err) {
-      await interaction.editReply('❌ Could not fetch server status.');
+      await interaction.editReply('\u274C Could not fetch server status.');
     }
 
   } else if (commandName === 'players') {
@@ -49,22 +46,22 @@ async function handleInteraction(interaction) {
       if (!players.length) {
         return interaction.editReply('No players currently online.');
       }
-      const list = players.map((p) => `• **${p.DisplayName}** — ${p.SteamID}`).join('\n');
+      const list = players.map((p) => `\u2022 **${p.DisplayName}** \u2014 ${p.SteamID}`).join('\n');
       const embed = new EmbedBuilder()
-        .setTitle(`👥 Online Players (${players.length})`)
+        .setTitle(`\uD83D\uDC65 Online Players (${players.length})`)
         .setColor(0x3498db)
         .setDescription(list)
         .setTimestamp();
       await interaction.editReply({ embeds: [embed] });
     } catch (err) {
-      await interaction.editReply('❌ Could not fetch player list.');
+      await interaction.editReply('\u274C Could not fetch player list.');
     }
 
   } else if (commandName === 'rcon') {
     const roleId = process.env.RCON_ROLE_ID;
     if (roleId && !interaction.member.roles.cache.has(roleId)) {
       return interaction.reply({
-        content: '❌ You do not have permission to run RCON commands.',
+        content: '\u274C You do not have permission to run RCON commands.',
         ephemeral: true,
       });
     }
@@ -76,7 +73,7 @@ async function handleInteraction(interaction) {
         `**Command:** \`${command}\`\n**Response:**\n\`\`\`${result || '(no output)'}\`\`\``
       );
     } catch (err) {
-      await interaction.editReply(`❌ RCON error: ${err.message}`);
+      await interaction.editReply(`\u274C RCON error: ${err.message}`);
     }
 
   } else if (commandName === 'say') {
@@ -85,9 +82,9 @@ async function handleInteraction(interaction) {
     const senderName = interaction.user.username;
     try {
       await rcon.send(`say [Discord] ${senderName}: ${message}`);
-      await interaction.editReply(`✅ Sent to server: **${message}**`);
+      await interaction.editReply(`\u2705 Sent to server: **${message}**`);
     } catch (err) {
-      await interaction.editReply(`❌ Failed to send message: ${err.message}`);
+      await interaction.editReply(`\u274C Failed to send message: ${err.message}`);
     }
   }
 }
