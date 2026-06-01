@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const { handleChatMessage } = require('./chatHandler');
 
 let ws = null;
+let rconInstance = null;
 let authenticated = false;
 let lastSeed = null;
 let messageId = 1;
@@ -22,19 +23,24 @@ function sendRaw(message) {
   });
 }
 
+function getRcon() {
+  return rconInstance;
+}
+
 async function connectRcon(client) {
   const host = process.env.RCON_HOST;
   const port = parseInt(process.env.RCON_PORT) || 28016;
   const password = process.env.RCON_PASSWORD;
   const url = `ws://${host}:${port}/${password}`;
 
-  console.log(`🔌 Connecting to RCON at ws://${host}:${port}/...`);
+  console.log(`\uD83D\uDD0C Connecting to RCON at ws://${host}:${port}/...`);
 
   ws = new WebSocket(url);
+  rconInstance = { send: sendRaw, isConnected: () => authenticated };
 
   ws.on('open', () => {
     authenticated = true;
-    console.log('✅ RCON connected (WebSocket)');
+    console.log('\u2705 RCON connected (WebSocket)');
   });
 
   ws.on('message', (data) => {
@@ -54,13 +60,11 @@ async function connectRcon(client) {
       if (msg.Identifier === -1 && msg.Message) {
         try {
           const event = JSON.parse(msg.Message);
-          // Chat message push event
           if (event.Type === 'chat' || event.Channel !== undefined) {
-            handleChatMessage(event, client).catch(() => {});
+            // Pass rconInstance directly — no circular require needed
+            handleChatMessage(event, client, rconInstance).catch(() => {});
           }
-        } catch (_) {
-          // Not JSON — ignore
-        }
+        } catch (_) {}
       }
     } catch (_) {}
   });
@@ -71,7 +75,7 @@ async function connectRcon(client) {
 
   ws.on('close', () => {
     authenticated = false;
-    console.warn('⚠️ RCON disconnected. Reconnecting in 10s...');
+    console.warn('\u26A0\uFE0F RCON disconnected. Reconnecting in 10s...');
     for (const [id, handler] of pending) {
       clearTimeout(handler.timeout);
       handler.reject(new Error('RCON disconnected'));
@@ -86,18 +90,13 @@ async function connectRcon(client) {
   });
 }
 
-function getRcon() {
-  return { send: sendRaw, isConnected: () => authenticated };
-}
-
 function startRconPolling(client) {
-  // Update server status embed on an interval
   const statusInterval = parseInt(process.env.STATUS_INTERVAL) || 60;
   setInterval(async () => {
     if (!authenticated) return;
     try {
       const { updateStatusEmbed } = require('../discord/statusEmbed');
-      await updateStatusEmbed(getRcon(), client);
+      await updateStatusEmbed(rconInstance, client);
     } catch (err) {
       console.error('Status update error:', err.message);
     }

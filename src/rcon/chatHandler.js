@@ -5,7 +5,7 @@ const keywords = (process.env.KEYWORD_LIST || 'cheat,hack,exploit')
   .split(',')
   .map((k) => k.trim().toLowerCase());
 
-async function handleChatMessage(event, client) {
+async function handleChatMessage(event, client, rcon) {
   const { UserId: steamId, Username: username, Message: message } = event;
   if (!message || !username) return;
 
@@ -21,12 +21,12 @@ async function handleChatMessage(event, client) {
   const lower = message.toLowerCase().trim();
 
   if (lower.startsWith('!report')) {
-    await handleReport(client, username, steamId, message);
+    await handleReport(client, reporter=username, reporterSteamId=steamId, message);
     return;
   }
 
   if (lower === '!pop') {
-    await handlePop();
+    await handlePop(rcon);
     return;
   }
 
@@ -36,11 +36,8 @@ async function handleChatMessage(event, client) {
   }
 }
 
-async function handlePop() {
+async function handlePop(rcon) {
   try {
-    // Lazy-require to avoid circular dependency with rconClient
-    const { getRcon } = require('./rconClient');
-    const rcon = getRcon();
     const info = await rcon.send('serverinfo');
     let count = '?';
     let max = '?';
