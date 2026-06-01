@@ -31,11 +31,10 @@ async function connectRcon(client) {
   const host = process.env.RCON_HOST;
   const port = parseInt(process.env.RCON_PORT) || 28016;
   const password = process.env.RCON_PASSWORD;
-  const url = `ws://${host}:${port}/${password}`;
 
   console.log(`🔌 Connecting to RCON at ws://${host}:${port}/...`);
 
-  ws = new WebSocket(url);
+  ws = new WebSocket(`ws://${host}:${port}/${password}`);
   rconInstance = { send: sendRaw, isConnected: () => authenticated };
 
   ws.on('open', () => {
@@ -47,7 +46,6 @@ async function connectRcon(client) {
     try {
       const msg = JSON.parse(data);
 
-      // Resolve a pending command response
       const handler = pending.get(msg.Identifier);
       if (handler) {
         clearTimeout(handler.timeout);
@@ -56,23 +54,13 @@ async function connectRcon(client) {
         return;
       }
 
-      // Identifier -1 = unsolicited push event from the server
       if (msg.Identifier === -1 && msg.Message) {
-        console.log('[DEBUG] Push event received, Type:', msg.Type);
         try {
           const event = JSON.parse(msg.Message);
-          console.log('[DEBUG] Parsed event keys:', Object.keys(event), '| Channel:', event.Channel, '| Type:', event.Type);
           if (event.Type === 'chat' || event.Channel !== undefined) {
-            console.log('[DEBUG] Routing to handleChatMessage, message:', event.Message);
-            handleChatMessage(event, client, rconInstance).catch((err) => {
-              console.error('[DEBUG] handleChatMessage error:', err.message);
-            });
-          } else {
-            console.log('[DEBUG] Event did not match chat condition, skipping.');
+            handleChatMessage(event, client, rconInstance).catch(() => {});
           }
-        } catch (err) {
-          console.log('[DEBUG] Failed to parse inner message:', err.message);
-        }
+        } catch (_) {}
       }
     } catch (_) {}
   });
@@ -110,7 +98,6 @@ function startRconPolling(client) {
     }
   }, statusInterval * 1000);
 
-  // Check for wipe (seed change) every 5 minutes
   setInterval(async () => {
     if (!authenticated) return;
     try {
