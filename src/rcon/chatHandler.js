@@ -1,5 +1,4 @@
 const { EmbedBuilder } = require('discord.js');
-const { getRcon } = require('./rconClient');
 
 const processedMessages = new Set();
 const keywords = (process.env.KEYWORD_LIST || 'cheat,hack,exploit')
@@ -39,6 +38,8 @@ async function handleChatMessage(event, client) {
 
 async function handlePop() {
   try {
+    // Lazy-require to avoid circular dependency with rconClient
+    const { getRcon } = require('./rconClient');
     const rcon = getRcon();
     const info = await rcon.send('serverinfo');
     let count = '?';
@@ -80,7 +81,7 @@ async function handleReport(client, reporter, reporterSteamId, message) {
   const reason = parts.slice(2).join(' ') || 'No reason given';
 
   const embed = new EmbedBuilder()
-    .setTitle('🚨 Admin Report')
+    .setTitle('\uD83D\uDEA8 Admin Report')
     .setColor(0xff4444)
     .addFields(
       { name: 'Reporter', value: `${reporter} (${reporterSteamId})`, inline: true },
@@ -99,7 +100,7 @@ async function handleKeywordAlert(client, username, steamId, message, keyword) {
   if (!channel) return;
 
   const embed = new EmbedBuilder()
-    .setTitle('🔍 Keyword Alert')
+    .setTitle('\uD83D\uDD0D Keyword Alert')
     .setColor(0xffa500)
     .addFields(
       { name: 'Player', value: `${username} (${steamId})`, inline: true },
