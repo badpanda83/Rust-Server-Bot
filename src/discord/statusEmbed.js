@@ -2,6 +2,13 @@ const { EmbedBuilder } = require('discord.js');
 
 let statusMessageId = null;
 
+function extractValue(raw) {
+  if (!raw) return 'N/A';
+  // Strips prefix like 'server.seed: "39084899"' or 'server.worldsize: "6000"'
+  const match = raw.match(/:\s*"?([^"\s]+)"?/);
+  return match ? match[1] : raw.trim();
+}
+
 async function updateStatusEmbed(rcon, client) {
   const channelId = process.env.CHANNEL_STATUS;
   if (!channelId) return;
@@ -16,8 +23,8 @@ async function updateStatusEmbed(rcon, client) {
       rcon.send('server.worldsize'),
     ]);
     const data = JSON.parse(info);
-    const seed = seedRaw ? seedRaw.trim() : 'N/A';
-    const mapSize = sizeRaw ? sizeRaw.trim() : 'N/A';
+    const seed = extractValue(seedRaw);
+    const mapSize = extractValue(sizeRaw);
 
     embed = new EmbedBuilder()
       .setTitle('\uD83E\uDD80 Rust Server Status')

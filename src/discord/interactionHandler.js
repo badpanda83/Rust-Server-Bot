@@ -1,6 +1,12 @@
 const { EmbedBuilder } = require('discord.js');
 const { getRcon } = require('../rcon/rconClient');
 
+function extractValue(raw) {
+  if (!raw) return 'N/A';
+  const match = raw.match(/:\s*"?([^"\s]+)"?/);
+  return match ? match[1] : raw.trim();
+}
+
 async function handleInteraction(interaction) {
   if (!interaction.isChatInputCommand()) return;
 
@@ -16,8 +22,8 @@ async function handleInteraction(interaction) {
         rcon.send('server.worldsize'),
       ]);
       const data = JSON.parse(info);
-      const seed = seedRaw ? seedRaw.trim() : 'N/A';
-      const mapSize = sizeRaw ? sizeRaw.trim() : 'N/A';
+      const seed = extractValue(seedRaw);
+      const mapSize = extractValue(sizeRaw);
 
       const embed = new EmbedBuilder()
         .setTitle('\uD83E\uDD80 Rust Server Status')
