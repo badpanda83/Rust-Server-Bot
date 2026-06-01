@@ -33,14 +33,14 @@ async function connectRcon(client) {
   const password = process.env.RCON_PASSWORD;
   const url = `ws://${host}:${port}/${password}`;
 
-  console.log(`\uD83D\uDD0C Connecting to RCON at ws://${host}:${port}/...`);
+  console.log(`🔌 Connecting to RCON at ws://${host}:${port}/...`);
 
   ws = new WebSocket(url);
   rconInstance = { send: sendRaw, isConnected: () => authenticated };
 
   ws.on('open', () => {
     authenticated = true;
-    console.log('\u2705 RCON connected (WebSocket)');
+    console.log('✅ RCON connected (WebSocket)');
   });
 
   ws.on('message', (data) => {
@@ -75,7 +75,7 @@ async function connectRcon(client) {
 
   ws.on('close', () => {
     authenticated = false;
-    console.warn('\u26A0\uFE0F RCON disconnected. Reconnecting in 10s...');
+    console.warn('⚠️ RCON disconnected. Reconnecting in 10s...');
     for (const [id, handler] of pending) {
       clearTimeout(handler.timeout);
       handler.reject(new Error('RCON disconnected'));
