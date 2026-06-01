@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { getRcon } = require('./rconClient');
 
 const processedMessages = new Set();
 const keywords = (process.env.KEYWORD_LIST || 'cheat,hack,exploit')
@@ -22,17 +23,57 @@ async function handleChatMessage(event, client) {
   // Relay to chat channel
   await relayChatMessage(client, username, steamId, message);
 
+  const lower = message.toLowerCase().trim();
+
   // Handle !report command
-  if (message.toLowerCase().startsWith('!report')) {
+  if (lower.startsWith('!report')) {
     await handleReport(client, username, steamId, message);
     return;
   }
 
+  // Handle !pop command
+  if (lower === '!pop') {
+    await handlePop(username);
+    return;
+  }
+
   // Keyword detection
-  const lower = message.toLowerCase();
   const hit = keywords.find((kw) => lower.includes(kw));
   if (hit) {
     await handleKeywordAlert(client, username, steamId, message, hit);
+  }
+}
+
+async function handlePop(requestingUsername) {
+  try {
+    const rcon = getRcon();
+    const raw = await rcon.send('playerlist');
+    let players = [];
+    try {
+      players = JSON.parse(raw);
+    } catch (_) {
+      // fallback: try parsing as plain text lines
+      players = [];
+    }
+
+    let reply;
+    if (Array.isArray(players) && players.length > 0) {
+      const names = players.map((p) => p.DisplayName || p.Username || 'Unknown').join(', ');
+      reply = `[POP] ${players.length} online: ${names}`;
+    } else {
+      // Fallback to server.info for player count
+      const info = await rcon.send('server.info');
+      let count = '?';
+      try {
+        const parsed = JSON.parse(info);
+        count = parsed.Players ?? '?';
+      } catch (_) {}
+      reply = `[POP] ${count} player(s) currently online.`;
+    }
+
+    await rcon.send(`say ${reply}`);
+  } catch (err) {
+    console.error('!pop error:', err.message);
   }
 }
 
