@@ -58,13 +58,21 @@ async function connectRcon(client) {
 
       // Identifier -1 = unsolicited push event from the server
       if (msg.Identifier === -1 && msg.Message) {
+        console.log('[DEBUG] Push event received, Type:', msg.Type);
         try {
           const event = JSON.parse(msg.Message);
+          console.log('[DEBUG] Parsed event keys:', Object.keys(event), '| Channel:', event.Channel, '| Type:', event.Type);
           if (event.Type === 'chat' || event.Channel !== undefined) {
-            // Pass rconInstance directly — no circular require needed
-            handleChatMessage(event, client, rconInstance).catch(() => {});
+            console.log('[DEBUG] Routing to handleChatMessage, message:', event.Message);
+            handleChatMessage(event, client, rconInstance).catch((err) => {
+              console.error('[DEBUG] handleChatMessage error:', err.message);
+            });
+          } else {
+            console.log('[DEBUG] Event did not match chat condition, skipping.');
           }
-        } catch (_) {}
+        } catch (err) {
+          console.log('[DEBUG] Failed to parse inner message:', err.message);
+        }
       }
     } catch (_) {}
   });
