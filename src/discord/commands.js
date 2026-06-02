@@ -22,6 +22,23 @@ const commands = [
     .addStringOption((opt) =>
       opt.setName('message').setDescription('Message to send').setRequired(true)
     ),
+
+  new SlashCommandBuilder()
+    .setName('serverreport')
+    .setDescription('Generate a player activity report')
+    .addIntegerOption((opt) =>
+      opt
+        .setName('days')
+        .setDescription('Time period in days (e.g. 30, 60, 90)')
+        .setRequired(true)
+        .addChoices(
+          { name: '30 days', value: 30 },
+          { name: '60 days', value: 60 },
+          { name: '90 days', value: 90 },
+          { name: '180 days', value: 180 },
+          { name: 'All time', value: 9999 }
+        )
+    ),
 ].map((cmd) => cmd.toJSON());
 
 async function registerCommands(client) {
