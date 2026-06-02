@@ -16,7 +16,10 @@ async function handleChatMessage(event, client, rcon) {
     processedMessages.delete(processedMessages.values().next().value);
   }
 
-  try { await relayChatMessage(client, username, steamId, message); } catch (_) {}
+  // Only relay global chat (Channel 0) to Discord, ignore team chat (Channel 1)
+  if (event.Channel === 0) {
+    try { await relayChatMessage(client, username, steamId, message); } catch (_) {}
+  }
 
   const lower = message.toLowerCase().trim();
 
@@ -64,7 +67,6 @@ async function findPlayerOnline(rcon, nameQuery) {
     const raw = await rcon.send('playerlist');
     const players = JSON.parse(raw);
     const query = nameQuery.toLowerCase();
-    // Try exact match first, then partial
     const match =
       players.find((p) => p.DisplayName.toLowerCase() === query) ||
       players.find((p) => p.DisplayName.toLowerCase().includes(query));
@@ -93,7 +95,6 @@ async function handleReport(client, rcon, reporter, reporterSteamId, message) {
   const reportedName = parts[1] || 'Unknown';
   const reason = parts.slice(2).join(' ') || 'No reason given';
 
-  // Attempt to find the reported player in the online playerlist
   const lookup = await findPlayerOnline(rcon, reportedName);
 
   const reportedField = lookup.found
