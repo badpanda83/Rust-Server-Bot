@@ -87,6 +87,9 @@ async function connectRcon(client) {
 }
 
 function startRconPolling(client) {
+  const { startSessionTracking } = require('../db/sessionTracker');
+  startSessionTracking(rconInstance);
+
   const statusInterval = parseInt(process.env.STATUS_INTERVAL) || 60;
   setInterval(async () => {
     if (!authenticated) return;

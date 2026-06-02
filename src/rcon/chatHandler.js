@@ -1,4 +1,5 @@
 const { EmbedBuilder } = require('discord.js');
+const { findPlayerInDb } = require('../db/database');
 
 const processedMessages = new Set();
 const keywords = (process.env.KEYWORD_LIST || 'cheat,hack,exploit')
@@ -62,21 +63,6 @@ async function handlePop(rcon) {
   }
 }
 
-async function findPlayerOnline(rcon, nameQuery) {
-  try {
-    const raw = await rcon.send('playerlist');
-    const players = JSON.parse(raw);
-    const query = nameQuery.toLowerCase();
-    const match =
-      players.find((p) => p.DisplayName.toLowerCase() === query) ||
-      players.find((p) => p.DisplayName.toLowerCase().includes(query));
-    if (match) {
-      return { found: true, name: match.DisplayName, steamId: match.SteamID };
-    }
-  } catch (_) {}
-  return { found: false };
-}
-
 async function relayChatMessage(client, username, steamId, message) {
   const channelId = process.env.CHANNEL_CHAT;
   if (!channelId) return;
@@ -95,11 +81,18 @@ async function handleReport(client, rcon, reporter, reporterSteamId, message) {
   const reportedName = parts[1] || 'Unknown';
   const reason = parts.slice(2).join(' ') || 'No reason given';
 
-  const lookup = await findPlayerOnline(rcon, reportedName);
+  // Look up in DB (online first, then recently seen)
+  const lookup = findPlayerInDb(reportedName);
 
-  const reportedField = lookup.found
-    ? `${lookup.name}\n[${lookup.steamId}](https://steamcommunity.com/profiles/${lookup.steamId})`
-    : `${reportedName}\n*(not found online)*`;
+  let reportedField;
+  if (lookup.found && lookup.online) {
+    reportedField = `${lookup.name}\n[${lookup.steamId}](https://steamcommunity.com/profiles/${lookup.steamId})\n✅ Currently online`;
+  } else if (lookup.found && !lookup.online) {
+    const lastSeen = lookup.lastSeen ? `\nLast seen: ${lookup.lastSeen} UTC` : '';
+    reportedField = `${lookup.name}\n[${lookup.steamId}](https://steamcommunity.com/profiles/${lookup.steamId})\n⚠️ Recently offline${lastSeen}`;
+  } else {
+    reportedField = `${reportedName}\n*(not found in records)*`;
+  }
 
   const embed = new EmbedBuilder()
     .setTitle('🚨 Admin Report')

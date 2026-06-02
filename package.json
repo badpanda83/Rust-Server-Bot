@@ -8,9 +8,10 @@
     "dev": "nodemon src/index.js"
   },
   "dependencies": {
+    "better-sqlite3": "^9.4.3",
     "discord.js": "^14.15.3",
-    "rcon-client": "^4.2.4",
     "dotenv": "^16.4.5",
+    "rcon-client": "^4.2.4",
     "ws": "^8.18.0"
   },
   "devDependencies": {
