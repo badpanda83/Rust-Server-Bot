@@ -17,11 +17,25 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_steam_id ON sessions(steam_id);
   CREATE INDEX IF NOT EXISTS idx_name ON sessions(name);
+
+  CREATE TABLE IF NOT EXISTS tickets (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     TEXT NOT NULL,
+    username    TEXT NOT NULL,
+    channel_id  TEXT NOT NULL,
+    category    TEXT NOT NULL,
+    description TEXT NOT NULL,
+    opened_at   DATETIME NOT NULL DEFAULT (datetime('now')),
+    closed_at   DATETIME
+  );
+  CREATE INDEX IF NOT EXISTS idx_ticket_channel ON tickets(channel_id);
+  CREATE INDEX IF NOT EXISTS idx_ticket_user    ON tickets(user_id);
 `);
 
 // Close any sessions that were left open from a previous bot run
 db.prepare(`UPDATE sessions SET logout_at = datetime('now') WHERE logout_at IS NULL`).run();
 
+// ── Sessions ──────────────────────────────────────────────────────────────────
 const stmtInsert = db.prepare(
   `INSERT INTO sessions (steam_id, name, login_at) VALUES (?, ?, datetime('now'))`
 );
@@ -46,18 +60,50 @@ function recordLogout(steamId, name) {
 }
 
 function findPlayerInDb(nameQuery) {
-  const exact = nameQuery;
+  const exact   = nameQuery;
   const partial = `%${nameQuery}%`;
-
-  // Check currently online first
-  const online = stmtFindOnline.get(exact, partial);
+  const online  = stmtFindOnline.get(exact, partial);
   if (online) return { found: true, online: true, name: online.name, steamId: online.steam_id };
-
-  // Fall back to most recently seen
-  const recent = stmtFindRecent.get(exact, partial);
-  if (recent) return { found: true, online: false, name: recent.name, steamId: recent.steam_id, lastSeen: recent.logout_at };
-
+  const recent  = stmtFindRecent.get(exact, partial);
+  if (recent)  return { found: true, online: false, name: recent.name, steamId: recent.steam_id, lastSeen: recent.logout_at };
   return { found: false };
 }
 
-module.exports = { recordLogin, recordLogout, findPlayerInDb };
+// ── Tickets ───────────────────────────────────────────────────────────────────
+const stmtOpenTicket = db.prepare(
+  `INSERT INTO tickets (user_id, username, channel_id, category, description)
+   VALUES (?, ?, ?, ?, ?)`
+);
+const stmtCloseTicket = db.prepare(
+  `UPDATE tickets SET closed_at = datetime('now') WHERE channel_id = ? AND closed_at IS NULL`
+);
+const stmtGetTicketByChannel = db.prepare(
+  `SELECT * FROM tickets WHERE channel_id = ? AND closed_at IS NULL`
+);
+const stmtGetOpenTicketByUser = db.prepare(
+  `SELECT * FROM tickets WHERE user_id = ? AND closed_at IS NULL LIMIT 1`
+);
+
+function openTicket(userId, username, channelId, category, description) {
+  const info = stmtOpenTicket.run(userId, username, channelId, category, description);
+  return info.lastInsertRowid;
+}
+
+function closeTicket(channelId) {
+  stmtCloseTicket.run(channelId);
+}
+
+function getTicketByChannelId(channelId, userId) {
+  if (channelId) return stmtGetTicketByChannel.get(channelId) || null;
+  if (userId)    return stmtGetOpenTicketByUser.get(userId) || null;
+  return null;
+}
+
+module.exports = {
+  recordLogin,
+  recordLogout,
+  findPlayerInDb,
+  openTicket,
+  closeTicket,
+  getTicketByChannelId,
+};
