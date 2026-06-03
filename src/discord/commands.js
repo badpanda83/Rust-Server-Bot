@@ -76,12 +76,17 @@ const commands = [
     .setName('event')
     .setDescription('Announce a server event to Discord and in-game')
     .addStringOption((opt) =>
-      opt.setName('description').setDescription('Event description (e.g. Raidable base at G12)').setRequired(true)
+      opt.setName('description').setDescription('Event description').setRequired(true)
     ),
 
   new SlashCommandBuilder()
     .setName('votewipe')
     .setDescription('Start a wipe vote in Discord (tallied after 5 minutes)'),
+
+  // ── Tickets ──────────────────────────────────────────────
+  new SlashCommandBuilder()
+    .setName('setuptickets')
+    .setDescription('[Admin] Post the support ticket panel in the current channel'),
 
   // ── Admin Tools (restricted to CHANNEL_ADMIN) ────────────
   new SlashCommandBuilder()
