@@ -75,6 +75,7 @@ async function handleTicketModal(interaction) {
     const description = interaction.fields.getTextInputValue('ticket_description');
     const guild       = interaction.guild;
     const user        = interaction.user;
+    const botId       = interaction.client.user.id;
 
     // Check user doesn't already have an open ticket
     const existing = getTicketByChannelId(null, user.id);
@@ -94,8 +95,23 @@ async function handleTicketModal(interaction) {
 
     const channelName = `ticket-${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
+    // Build permission overwrites — bot MUST be explicitly allowed or it can't send into the channel
     const permissionOverwrites = [
-      { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
+      {
+        id: guild.roles.everyone,
+        deny: [PermissionFlagsBits.ViewChannel],
+      },
+      {
+        // Bot itself — needs full access to post the embed and delete the channel on close
+        id: botId,
+        allow: [
+          PermissionFlagsBits.ViewChannel,
+          PermissionFlagsBits.SendMessages,
+          PermissionFlagsBits.ReadMessageHistory,
+          PermissionFlagsBits.ManageChannels,
+          PermissionFlagsBits.EmbedLinks,
+        ],
+      },
       {
         id: user.id,
         allow: [
@@ -141,10 +157,9 @@ async function handleTicketModal(interaction) {
       console.log(`[Tickets] DB record created: ticket #${ticketId}`);
     } catch (err) {
       console.error('[Tickets] DB write failed:', err);
-      // Continue — channel exists, close button will still work
     }
 
-    // Build the close button row first so we can always post it
+    // Build close button row
     const closeRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('ticket_close')
@@ -152,18 +167,19 @@ async function handleTicketModal(interaction) {
         .setStyle(ButtonStyle.Danger)
     );
 
-    // Post the ping + close button (minimal — always works)
+    // Send ping + close button first (always needs to land)
     const pingContent = resolvedAdminRole
       ? `<@${user.id}> <@&${resolvedAdminRole.id}>`
       : `<@${user.id}>`;
 
     try {
       await ticketChannel.send({ content: pingContent, components: [closeRow] });
+      console.log(`[Tickets] Close button sent to #${ticketChannel.name}`);
     } catch (err) {
       console.error('[Tickets] Failed to send ping/close row:', err);
     }
 
-    // Post the details embed separately
+    // Send details embed separately
     try {
       const ticketEmbed = new EmbedBuilder()
         .setTitle(`🎫 Ticket #${ticketId} — ${category}`)
