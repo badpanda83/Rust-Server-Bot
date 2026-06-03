@@ -86,7 +86,10 @@ const commands = [
   // ── Tickets ──────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('setuptickets')
-    .setDescription('[Admin] Post the support ticket panel in the current channel'),
+    .setDescription('[Admin] Post the support ticket panel in a specified channel')
+    .addChannelOption((opt) =>
+      opt.setName('channel').setDescription('The channel to post the ticket panel in').setRequired(true)
+    ),
 
   // ── Admin Tools (restricted to CHANNEL_ADMIN) ────────────
   new SlashCommandBuilder()
