@@ -67,7 +67,7 @@ async function isAdminChannel(interaction) {
 }
 
 async function handleInteraction(interaction) {
-  // ── Ticket button ────────────────────────────────────────────────────────────
+  // ── Ticket button ─────────────────────────────────────────────────────────────
   if (interaction.isButton() && interaction.customId === 'ticket_open') {
     return handleTicketButton(interaction);
   }
@@ -157,7 +157,7 @@ async function handleInteraction(interaction) {
       await interaction.editReply({ embeds: [embed] });
     } catch { await interaction.editReply('❌ Could not fetch wipe info.'); }
 
-  // ── NEXT WIPE ─────────────────────────────���──────────────────────────────────
+  // ── NEXT WIPE ────────────────────────────────────────────────────────────────
   } else if (commandName === 'nextwipe') {
     const nextWipe = process.env.NEXT_WIPE_DATE || 'Not scheduled yet';
     const embed = new EmbedBuilder()
@@ -393,11 +393,12 @@ async function handleInteraction(interaction) {
   } else if (commandName === 'setuptickets') {
     await interaction.deferReply({ ephemeral: true });
     try {
-      await postTicketPanel(interaction.channel);
-      await interaction.editReply('✅ Ticket panel posted!');
+      const targetChannel = interaction.options.getChannel('channel');
+      await postTicketPanel(targetChannel);
+      await interaction.editReply(`✅ Ticket panel posted in ${targetChannel}!`);
     } catch (err) {
       console.error('setuptickets error:', err);
-      await interaction.editReply('❌ Could not post ticket panel.');
+      await interaction.editReply('❌ Could not post ticket panel. Make sure the bot has permission to post in that channel.');
     }
 
   // ── SAY ───────────────────────────────────────────────────────────────────────
