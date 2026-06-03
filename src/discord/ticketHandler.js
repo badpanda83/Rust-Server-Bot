@@ -81,7 +81,6 @@ async function handleTicketModal(interaction) {
     return interaction.editReply(`❌ You already have an open ticket: <#${existing.channel_id}>`);
   }
 
-  // Validate admin role if configured
   const adminRoleId = process.env.TICKET_ADMIN_ROLE;
   let resolvedAdminRole = null;
   if (adminRoleId) {
@@ -94,6 +93,10 @@ async function handleTicketModal(interaction) {
 
   const channelName = `ticket-${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
+  // NOTE: Only ViewChannel, SendMessages, ReadMessageHistory are set in overwrites.
+  // ManageChannels is intentionally excluded — setting it in an overwrite requires
+  // the bot to have Manage Roles, which is a larger permission than needed.
+  // Ticket closing is handled exclusively via the Close Ticket button.
   const permissionOverwrites = [
     {
       id: guild.roles.everyone,
@@ -116,7 +119,6 @@ async function handleTicketModal(interaction) {
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
         PermissionFlagsBits.ReadMessageHistory,
-        PermissionFlagsBits.ManageChannels,
       ],
     });
   }
@@ -132,8 +134,7 @@ async function handleTicketModal(interaction) {
     console.error('Failed to create ticket channel:', err);
     return interaction.editReply(
       `❌ Could not create ticket channel.\n**Reason:** ${err.message}\n\n` +
-      `Make sure the bot has **Manage Channels** permission in the server.` +
-      (adminRoleId && !resolvedAdminRole ? `\n\nAlso check that \`TICKET_ADMIN_ROLE\` (${adminRoleId}) is a valid role ID.` : '')
+      `Make sure the bot role has **Manage Channels** in Server Settings → Roles.`
     );
   }
 
