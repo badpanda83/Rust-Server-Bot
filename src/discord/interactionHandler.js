@@ -2,12 +2,18 @@ const { EmbedBuilder } = require('discord.js');
 const { getRcon } = require('../rcon/rconClient');
 const { getPlayerReport, formatMinutes } = require('../db/reportQueries');
 const { findPlayerInDb } = require('../db/database');
+const {
+  postTicketPanel,
+  handleTicketButton,
+  handleTicketModal,
+  handleTicketClose,
+} = require('./ticketHandler');
 const Database = require('better-sqlite3');
 const path = require('path');
 
 // ── Admin commands restricted to CHANNEL_ADMIN ────────────────────────────────
 const ADMIN_COMMANDS = new Set([
-  'say', 'announce', 'alert', 'restart', 'kick', 'ban', 'unban', 'rcon',
+  'say', 'announce', 'alert', 'restart', 'kick', 'ban', 'unban', 'rcon', 'setuptickets',
 ]);
 
 const RUST_TIPS = [
@@ -49,7 +55,7 @@ function formatTimeAgo(dateStr) {
 
 async function isAdminChannel(interaction) {
   const adminChannelId = process.env.CHANNEL_ADMIN;
-  if (!adminChannelId) return true; // not configured = no restriction
+  if (!adminChannelId) return true;
   if (interaction.channelId !== adminChannelId) {
     await interaction.reply({
       content: `⛔ Admin commands can only be used in <#${adminChannelId}>.`,
@@ -61,6 +67,19 @@ async function isAdminChannel(interaction) {
 }
 
 async function handleInteraction(interaction) {
+  // ── Ticket button ────────────────────────────────────────────────────────────
+  if (interaction.isButton() && interaction.customId === 'ticket_open') {
+    return handleTicketButton(interaction);
+  }
+  if (interaction.isButton() && interaction.customId === 'ticket_close') {
+    return handleTicketClose(interaction);
+  }
+
+  // ── Ticket modal submission ───────────────────────────────────────────────────
+  if (interaction.isModalSubmit() && interaction.customId === 'ticket_modal') {
+    return handleTicketModal(interaction);
+  }
+
   if (!interaction.isChatInputCommand()) return;
 
   const rcon = getRcon();
@@ -138,7 +157,7 @@ async function handleInteraction(interaction) {
       await interaction.editReply({ embeds: [embed] });
     } catch { await interaction.editReply('❌ Could not fetch wipe info.'); }
 
-  // ── NEXT WIPE ────────────────────────────────────────────────────────────────
+  // ── NEXT WIPE ─────────────────────────────���──────────────────────────────────
   } else if (commandName === 'nextwipe') {
     const nextWipe = process.env.NEXT_WIPE_DATE || 'Not scheduled yet';
     const embed = new EmbedBuilder()
@@ -175,9 +194,7 @@ async function handleInteraction(interaction) {
           ROUND(SUM((julianday(COALESCE(logout_at, datetime('now'))) - julianday(login_at)) * 1440), 0) AS total_minutes
         FROM sessions
         WHERE LOWER(steam_id) = LOWER(?) OR LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?)
-        GROUP BY steam_id
-        ORDER BY total_minutes DESC
-        LIMIT 1
+        GROUP BY steam_id ORDER BY total_minutes DESC LIMIT 1
       `).get(query, query, `%${query}%`);
       db.close();
       if (!row) return interaction.editReply(`❌ No records found for **${query}**.`);
@@ -188,9 +205,9 @@ async function handleInteraction(interaction) {
         .setColor(0x3498db)
         .addFields(
           { name: 'Steam ID',       value: `[${row.steam_id}](https://steamcommunity.com/profiles/${row.steam_id})`, inline: true },
-          { name: 'Status',         value: onlineStatus,                    inline: true },
-          { name: 'Total Playtime', value: formatMinutes(row.total_minutes), inline: true },
-          { name: 'Sessions',       value: String(row.sessions),            inline: true },
+          { name: 'Status',         value: onlineStatus,                     inline: true },
+          { name: 'Total Playtime', value: formatMinutes(row.total_minutes),  inline: true },
+          { name: 'Sessions',       value: String(row.sessions),             inline: true },
           { name: 'First Seen',     value: row.first_seen ? row.first_seen + ' UTC' : 'N/A', inline: true },
           { name: 'Last Seen',      value: row.last_seen  ? row.last_seen  + ' UTC' : 'N/A', inline: true },
         )
@@ -259,10 +276,10 @@ async function handleInteraction(interaction) {
         .setTitle(`📊 Server Report — ${label}`)
         .setColor(0x9b59b6)
         .addFields(
-          { name: '👤 Unique Players',      value: String(total_unique || 0),               inline: true },
+          { name: '👤 Unique Players',      value: String(total_unique || 0),                inline: true },
           { name: '🔁 Repeat Players',      value: `${repeat_players || 0} (${returnRate})`, inline: true },
-          { name: '📋 Total Sessions',      value: String(total_sessions || 0),             inline: true },
-          { name: '⏱️ Avg Session Length',  value: formatMinutes(avg_minutes || 0),         inline: true },
+          { name: '📋 Total Sessions',      value: String(total_sessions || 0),              inline: true },
+          { name: '⏱️ Avg Session Length',  value: formatMinutes(avg_minutes || 0),          inline: true },
           { name: '🏆 Top Players by Time', value: topList },
         )
         .setFooter({ text: 'Report generated' })
@@ -283,9 +300,7 @@ async function handleInteraction(interaction) {
           ROUND(SUM((julianday(COALESCE(logout_at, datetime('now'))) - julianday(login_at)) * 1440), 0) AS total_minutes,
           COUNT(*) AS sessions
         FROM sessions
-        GROUP BY steam_id
-        ORDER BY total_minutes DESC
-        LIMIT 10
+        GROUP BY steam_id ORDER BY total_minutes DESC LIMIT 10
       `).all();
       db.close();
       if (!rows.length) return interaction.editReply('No data yet.');
@@ -309,14 +324,13 @@ async function handleInteraction(interaction) {
       const rows = db.prepare(`SELECT login_at, logout_at FROM sessions ORDER BY login_at`).all();
       db.close();
       if (!rows.length) return interaction.editReply('No session data yet.');
-      let peak = 0;
-      let peakTime = null;
+      let peak = 0; let peakTime = null;
       for (const row of rows) {
         const t = new Date(row.login_at + ' UTC').getTime();
         const active = rows.filter((r) => {
-          const start = new Date(r.login_at + ' UTC').getTime();
-          const end = r.logout_at ? new Date(r.logout_at + ' UTC').getTime() : Date.now();
-          return start <= t && end >= t;
+          const s = new Date(r.login_at + ' UTC').getTime();
+          const e = r.logout_at ? new Date(r.logout_at + ' UTC').getTime() : Date.now();
+          return s <= t && e >= t;
         }).length;
         if (active > peak) { peak = active; peakTime = row.login_at; }
       }
@@ -374,6 +388,17 @@ async function handleInteraction(interaction) {
         await interaction.followUp(result);
       } catch {}
     }, 5 * 60 * 1000);
+
+  // ── SETUP TICKETS ─────────────────────────────────────────────────────────────
+  } else if (commandName === 'setuptickets') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      await postTicketPanel(interaction.channel);
+      await interaction.editReply('✅ Ticket panel posted!');
+    } catch (err) {
+      console.error('setuptickets error:', err);
+      await interaction.editReply('❌ Could not post ticket panel.');
+    }
 
   // ── SAY ───────────────────────────────────────────────────────────────────────
   } else if (commandName === 'say') {
