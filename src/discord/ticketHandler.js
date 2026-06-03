@@ -75,15 +75,23 @@ async function handleTicketModal(interaction) {
   const guild       = interaction.guild;
   const user        = interaction.user;
 
-  const adminRoleId = process.env.TICKET_ADMIN_ROLE;
-
   // Check user doesn't already have an open ticket
   const existing = getTicketByChannelId(null, user.id);
   if (existing) {
     return interaction.editReply(`❌ You already have an open ticket: <#${existing.channel_id}>`);
   }
 
-  // Create private channel
+  // Validate admin role if configured
+  const adminRoleId = process.env.TICKET_ADMIN_ROLE;
+  let resolvedAdminRole = null;
+  if (adminRoleId) {
+    resolvedAdminRole = guild.roles.cache.get(adminRoleId)
+      || await guild.roles.fetch(adminRoleId).catch(() => null);
+    if (!resolvedAdminRole) {
+      console.warn(`[Tickets] TICKET_ADMIN_ROLE "${adminRoleId}" not found in guild — skipping role overwrite.`);
+    }
+  }
+
   const channelName = `ticket-${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
   const permissionOverwrites = [
@@ -101,9 +109,9 @@ async function handleTicketModal(interaction) {
     },
   ];
 
-  if (adminRoleId) {
+  if (resolvedAdminRole) {
     permissionOverwrites.push({
-      id: adminRoleId,
+      id: resolvedAdminRole.id,
       allow: [
         PermissionFlagsBits.ViewChannel,
         PermissionFlagsBits.SendMessages,
@@ -122,7 +130,11 @@ async function handleTicketModal(interaction) {
     });
   } catch (err) {
     console.error('Failed to create ticket channel:', err);
-    return interaction.editReply('❌ Could not create ticket channel. Check bot permissions.');
+    return interaction.editReply(
+      `❌ Could not create ticket channel.\n**Reason:** ${err.message}\n\n` +
+      `Make sure the bot has **Manage Channels** permission in the server.` +
+      (adminRoleId && !resolvedAdminRole ? `\n\nAlso check that \`TICKET_ADMIN_ROLE\` (${adminRoleId}) is a valid role ID.` : '')
+    );
   }
 
   // Log to DB
@@ -148,7 +160,7 @@ async function handleTicketModal(interaction) {
   );
 
   await ticketChannel.send({
-    content: adminRoleId ? `<@${user.id}> <@&${adminRoleId}>` : `<@${user.id}>`,
+    content: resolvedAdminRole ? `<@${user.id}> <@&${resolvedAdminRole.id}>` : `<@${user.id}>`,
     embeds: [ticketEmbed],
     components: [closeRow],
   });
