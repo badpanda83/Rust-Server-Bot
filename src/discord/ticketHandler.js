@@ -82,23 +82,20 @@ async function handleTicketModal(interaction) {
       return interaction.editReply(`❌ You already have an open ticket: <#${existing.channel_id}>`);
     }
 
-    // Resolve admin role from cache only — avoid hanging network fetch
+    // Resolve admin role from cache
     const adminRoleId = process.env.TICKET_ADMIN_ROLE;
     let resolvedAdminRole = null;
     if (adminRoleId) {
       resolvedAdminRole = guild.roles.cache.get(adminRoleId) || null;
       if (!resolvedAdminRole) {
-        console.warn(`[Tickets] TICKET_ADMIN_ROLE "${adminRoleId}" not found in role cache — skipping role overwrite.`);
+        console.warn(`[Tickets] TICKET_ADMIN_ROLE "${adminRoleId}" not in cache — skipping role overwrite.`);
       }
     }
 
     const channelName = `ticket-${user.username.toLowerCase().replace(/[^a-z0-9]/g, '')}`;
 
     const permissionOverwrites = [
-      {
-        id: guild.roles.everyone,
-        deny: [PermissionFlagsBits.ViewChannel],
-      },
+      { id: guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
       {
         id: user.id,
         allow: [
@@ -120,6 +117,7 @@ async function handleTicketModal(interaction) {
       });
     }
 
+    // Create the channel
     let ticketChannel;
     try {
       ticketChannel = await guild.channels.create({
@@ -128,35 +126,25 @@ async function handleTicketModal(interaction) {
         permissionOverwrites,
       });
     } catch (err) {
-      console.error('Failed to create ticket channel:', err);
+      console.error('[Tickets] Failed to create channel:', err);
       return interaction.editReply(
-        `❌ Could not create ticket channel.\n**Reason:** ${err.message}\n\n` +
-        `Make sure the bot role has **Manage Channels** in Server Settings → Roles.`
+        `❌ Could not create ticket channel.\n**Reason:** ${err.message}\n\nMake sure the bot role has **Manage Channels** in Server Settings → Roles.`
       );
     }
 
+    console.log(`[Tickets] Channel created: #${ticketChannel.name} (${ticketChannel.id})`);
+
     // Log to DB
-    let ticketId;
+    let ticketId = '?';
     try {
       ticketId = openTicket(user.id, user.username, ticketChannel.id, category, description);
+      console.log(`[Tickets] DB record created: ticket #${ticketId}`);
     } catch (err) {
-      console.error('Failed to log ticket to DB:', err);
-      // Channel was created — still tell the user, but warn about DB
-      ticketId = '?';
+      console.error('[Tickets] DB write failed:', err);
+      // Continue — channel exists, close button will still work
     }
 
-    // Post the ticket embed inside the new channel
-    const ticketEmbed = new EmbedBuilder()
-      .setTitle(`🎫 Ticket #${ticketId} — ${category}`)
-      .setColor(0xe67e22)
-      .addFields(
-        { name: '👤 Opened by', value: `<@${user.id}>`, inline: true },
-        { name: '📂 Category',  value: category,         inline: true },
-        { name: '📝 Issue',     value: description },
-      )
-      .setFooter({ text: 'An admin will be with you shortly.' })
-      .setTimestamp();
-
+    // Build the close button row first so we can always post it
     const closeRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('ticket_close')
@@ -164,18 +152,39 @@ async function handleTicketModal(interaction) {
         .setStyle(ButtonStyle.Danger)
     );
 
-    await ticketChannel.send({
-      content: resolvedAdminRole ? `<@${user.id}> <@&${resolvedAdminRole.id}>` : `<@${user.id}>`,
-      embeds: [ticketEmbed],
-      components: [closeRow],
-    });
+    // Post the ping + close button (minimal — always works)
+    const pingContent = resolvedAdminRole
+      ? `<@${user.id}> <@&${resolvedAdminRole.id}>`
+      : `<@${user.id}>`;
 
-    await interaction.editReply(`✅ Your ticket has been opened: ${ticketChannel}`);
+    try {
+      await ticketChannel.send({ content: pingContent, components: [closeRow] });
+    } catch (err) {
+      console.error('[Tickets] Failed to send ping/close row:', err);
+    }
+
+    // Post the details embed separately
+    try {
+      const ticketEmbed = new EmbedBuilder()
+        .setTitle(`🎫 Ticket #${ticketId} — ${category}`)
+        .setColor(0xe67e22)
+        .addFields(
+          { name: '👤 Opened by', value: `<@${user.id}>`, inline: true },
+          { name: '📂 Category',  value: category || 'N/A', inline: true },
+          { name: '📝 Issue',     value: description || 'N/A' },
+        )
+        .setFooter({ text: 'An admin will be with you shortly.' })
+        .setTimestamp();
+      await ticketChannel.send({ embeds: [ticketEmbed] });
+    } catch (err) {
+      console.error('[Tickets] Failed to send ticket embed:', err);
+    }
+
+    await interaction.editReply(`✅ Your ticket has been opened: <#${ticketChannel.id}>`);
 
   } catch (err) {
     console.error('[Tickets] Unhandled error in handleTicketModal:', err);
-    // Always resolve the interaction so Discord doesn't leave it spinning
-    await interaction.editReply('❌ Something went wrong opening your ticket. Please try again.').catch(() => {});
+    await interaction.editReply(`❌ Unexpected error: ${err.message}`).catch(() => {});
   }
 }
 
@@ -218,12 +227,10 @@ async function handleTicketClose(interaction) {
             { name: '🔒 Closed by', value: `${interaction.user.username}`,           inline: true },
           )
           .setTimestamp();
-
-        await logChannel.send({ embeds: [logEmbed] });
-
+        await logChannel.send({ embeds: [logEmbed] }).catch(() => {});
         if (transcript.length > 0) {
           const truncated = transcript.length > 1900 ? transcript.slice(-1900) + '\n...' : transcript;
-          await logChannel.send(`**Transcript:**\n\`\`\`\n${truncated}\n\`\`\``);
+          await logChannel.send(`**Transcript:**\n\`\`\`\n${truncated}\n\`\`\``).catch(() => {});
         }
       }
     }
@@ -233,7 +240,7 @@ async function handleTicketClose(interaction) {
 
   } catch (err) {
     console.error('[Tickets] Unhandled error in handleTicketClose:', err);
-    await interaction.editReply('❌ Something went wrong closing the ticket.').catch(() => {});
+    await interaction.editReply(`❌ Error closing ticket: ${err.message}`).catch(() => {});
   }
 }
 
